@@ -46,22 +46,74 @@ tags: spring java
 
 #### 2.2.1 BeanFactory的使用场景
 
+`BeanFactory` 的接口定义如下：提供了一些最基本的IoC容器功能
+
 ```java 
 public interface BeanFactory {
+    //使用转义字符“&”来获取BeanFactory本身这个Bean，用来区分工厂Bean和工厂Bean产生的对象Bean
 	String FACTORY_BEAN_PREFIX = "&";
+    //通过各种参数获取容器中的Bean
 	Object getBean(String name) throws BeansException;
 	<T> T getBean(String name, Class<T> requiredType) throws BeansException;
 	Object getBean(String name, Object... args) throws BeansException;
 	<T> T getBean(Class<T> requiredType) throws BeansException;
 	<T> T getBean(Class<T> requiredType, Object... args) throws BeansException;
+    //判断容器中是否含有指定name的bean
 	boolean containsBean(String name);
+    //判断指定名字的bean是否是Singleton类型的，可以在BeanDefinition中指定
 	boolean isSingleton(String name) throws NoSuchBeanDefinitionException;
+      //判断指定名字的bean是否是Prototype类型的，可以在BeanDefinition中指定
 	boolean isPrototype(String name) throws NoSuchBeanDefinitionException;
+    //判断指定名字的bean的class类型是不是特定的类型
 	boolean isTypeMatch(String name, ResolvableType typeToMatch) throws NoSuchBeanDefinitionException;
+    //判断指定名字的bean的class类型是不是特定的class类型
 	boolean isTypeMatch(String name, Class<?> typeToMatch) throws NoSuchBeanDefinitionException;
+    //获取指定名字的bean的class类型
 	Class<?> getType(String name) throws NoSuchBeanDefinitionException;
+    //获取指定名字bean的所有别名，别名可以在BeanDefinition里指定
 	String[] getAliases(String name);
 
 }
 ```
+
+`BeanFactory` 接口定义了IoC容器的最基本的形式，并没有给出具体实现，像 `XmlBeanFactory` 等都可以看做是容器附加了某种功能的具体实现。
+
+#### 2.2.2 BeanFactory容器的设计原理
+
+以 `XmlBeanFactory` 的实现为例，简单介绍IoC容器的设计原理
+
+![](https://icon.qiantucdn.com/20191215/a422a425aedf1d0d5f140026ab568e4c2)
+
+`XmlBeanFactory` 顾名思义，就是一个可以读取以XML文件方式定义的 `BeanDefinition` 的IoC容器。源码如下，很简单明了：
+
+```java
+public class XmlBeanFactory extends DefaultListableBeanFactory {
+	private final XmlBeanDefinitionReader reader = new XmlBeanDefinitionReader(this);
+	public XmlBeanFactory(Resource resource) throws BeansException {
+		this(resource, null);
+	}
+	public XmlBeanFactory(Resource resource, BeanFactory parentBeanFactory) throws BeansException {
+		super(parentBeanFactory);
+		this.reader.loadBeanDefinitions(resource);
+	}
+
+}
+```
+
+- 通过 `XmlBeanDefinitionReader` 读取Resource，该resource是以xml文件格式定义的 `BeanDefinition` 信息
+- 通过 `loadBeanDefinitions()` 方法解析resource中的 `BeanDefinition` 信息
+- 将获取到的bean注册并载入到容器中
+
+#### 2.2.3 ApplicationContext的应用场景
+
+`ApplicationContext` 在 `BeanFactory` 的基础上添加了新的功能，属于高级形态意义的IoC容器：
+
+- 支持不同的信息源。 扩展了 `MessageResource` 接口
+- 访问资源。体现在对 `ResourceLoader` 以及 `Resource` 接口的支持上，可以从不同地方获取Bean定义资源。
+- 支持应用事件。继承了接口 `ApplicationEventPublisher` 从而在上下文中引入了事件机制。
+- 在 `ApplicationContext` 中提供的附加服务。面向框架，推荐使用 `Applicationcontext` 作为IoC容器的基本形式。
+
+#### 2.2.4 ApplicationContext容器的设计原理
+
+以常用的 `FileSystemXmlApplicationContext` 的实现为例：
 
