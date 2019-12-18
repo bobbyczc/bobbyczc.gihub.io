@@ -117,3 +117,13 @@ public class XmlBeanFactory extends DefaultListableBeanFactory {
 
 以常用的 `FileSystemXmlApplicationContext` 的实现为例：
 
+## 3. IoC容器的初始化过程
+
+IoC容器的启动过程包括 `BeanDefinition` 的Resource定位、载入和注册三个基本过程
+
+- Resource定位。即容器寻找用户定义Bean的资源位置
+- BeanDefinition的载入。即将用户定义好的bean表示成容器内部的数据结构（BeanDefinition）
+- 向IoC容器注册这些BeanDefinition。通过调用 `BeanDefinitionRegistry` 接口的实现，在IoC容器内部将BeanDefinition注入到一个hashMap里面，而IoC容器也是通过这个hashMap来持有管理这些BeanDefinition数据
+
+### 3.1 BeanDefinition的Resource定位
+
