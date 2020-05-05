@@ -180,11 +180,256 @@ public Job job() {
 ...
 ```
 
-乍看一下，‘on’ 元素似乎引用了 `Step` 的 `BatchStatus` ，但是实际上它表示的是 `Step` 的 `ExitStatus` ，就像名字显示的一样，`ExitStatus` 表示一个 `Step` 完成执行之后的状态
+乍看一下，‘on’ 元素似乎引用了 `Step` 的 `BatchStatus` ，但是实际上它表示的是 `Step` 的 `ExitStatus` ，就像名字显示的一样，`ExitStatus` 表示一个 `Step` 完成执行之后的状态。
+
+在英语中可以这么说，“如果退出码是 `FAILED` 流程走向Step B”。默认情况下，退出码总是和 `Step` 的 `BatchStatus` 的值是一样的 ，这也是上面的方式有效的原因。但是如果我们的退出码需要不一样呢？下面是一个很好的例子：
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+			.start(step1()).on("FAILED").end()
+			.from(step1()).on("COMPLETED WITH SKIPS").to(errorPrint1())
+			.from(step1()).on("*").to(step2())
+			.end()
+			.build();
+}
+```
+
+`step1` 有三种可能：
+
+1. 失败，这种情况下，job直接失败
+2. 成功完成
+3. 成功完成，但是退出码为 ‘COMPLETED WITH SKIPS’，在这种情况下，一个不一样的步骤会来处理这些错误
+
+上面的配置是有效的。但是在执行跳过了一些记录的情况下，我们需要有一种机制来改变退出码，就像下面的例子一样：
+
+```java
+public class SkipCheckingListener extends StepExecutionListenerSupport {
+    public ExitStatus afterStep(StepExecution stepExecution) {
+        String exitCode = stepExecution.getExitStatus().getExitCode();
+        if (!exitCode.equals(ExitStatus.FAILED.getExitCode()) &&
+              stepExecution.getSkipCount() > 0) {
+            return new ExitStatus("COMPLETED WITH SKIPS");
+        }
+        else {
+            return null;
+        }
+    }
+}
+```
+
+上面的代码是一个 `stepExecutionListener` ，它会首先确认 `Step` 成功完成，然后检查是否 `StepExecution` 的跳过的数量大于0；如果两个条件都满足的话，就会返回一个新的 `ExitStatus` 退出码为 `COMPLETED WITH SKIPS` 。
+
+### 1.3.3 Configuring for Stop
+
+讨论完 BatchStatus 和ExitStatus 之后，有人可能会好奇如何为 `Job` 定义 `BatchStatus` 和 `ExitStatus` 。`Step` 返回的状态是由具体的执行代码决定的，`Job` 的状态是基于配置来确定的。
+
+目前为止，所有讨论到的job配置都至少有一个固定的没有transition的 `Step` 。像下面的例子一样，step执行完，job就结束了：
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+				.start(step1())
+				.build();
+}
+```
+
+如果一个 `Step` 没有定义事务（条件逻辑），那么 `Job` 的状态有下面几种可能：
+
+- 如果 `Step` 返回 `FAILED` 的 `ExitStatus` ，那么 `Job` 的 `BatchStatus` 和 `ExitStatus` 都是 `FAILED`。
+- 否则 `Job` 的 `BatchStatus` 和 `ExitStatus` 都是 `COMPLETED` 。
+
+虽然这种结束批处理作业的方法能满足一些场景，但是，我们仍可能需要自定义的作业停止场景。为了达成这种目的，Spring Batch 提供了三种 stopping elements来停止一个 `Job`（上面已经提及的 `next` 元素除外）。这些 stopping elements 中的每一个都会用一个特殊的 `BatchStatus` 停止一个 `Job` 。特别值得注意的是，这些stop elements对这个 `Job` 中的任意 `Steps` 的 `BatchStatus` 和 `ExitStatus` 没有任何影响，它们只影响这个 `Job` 的最终状态。比如，就算job中的每个step都是 `FAILED` 的状态，但是Job也有可能是 `COMPLETED` 的状态。
+
+#### Ending at a Step
+
+配置一个 step end 会让一个 `Job` 停止并返回 `COMPLETED` 的 `BatchStatus` 。一个以 `COMPLETED` 状态结束的 `Job` 不可以被重新启动（框架会抛出 `JobInstanceAlreadyCompleteException` 异常）。
+
+当使用Java配置时，可以使用 ‘end’ 方法。`end` 方法同样允许可选的 'exitStatus' 参数来自定义 `Job` 的 `ExitStatus` 。如果没有提供 ‘exitStatus’ 那么默认的 `ExitStatus` 为 `COMPLETED` 来匹配 `BatchStatus` 。
+
+在下面的场景中，如果 `step2` 失败了，那么 `Job` 会停止，`BatchStatus` 以及 `ExitStatus` 都为 `COMPLETED` ，并且 `step3` 不会执行。否则，`step3` 执行。注意如果 `step2` 失败了，那么 `Job` 是不能重启的，因为状态是 `COMPLETED` 。
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+				.start(step1())
+				.next(step2())
+				.on("FAILED").end()
+				.from(step2()).on("*").to(step3())
+				.end()
+				.build();
+}
+```
+
+#### Failing a Step
+
+配置 step 在某个点失败会让一个 `Job` 以 `FAILED` 的 `BatchStatus` 停止，和end不一样，失败的 `Job` 可以重启。
+
+在下面的场景值，如果 `step2` 失败，那么 `Job` 停止，`BatchStatus` 为 `FAILED` ，`ExitStatus` 为 `EARLY TERMINATION` ，`step3` 不会执行；否则，`step3` 执行。此外，如果 `step2` 失败并且 `Job` 重启，那么会从 `step2` 开始执行。
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+			.start(step1())
+			.next(step2()).on("FAILED").fail()
+			.from(step2()).on("*").to(step3())
+			.end()
+			.build();
+}
+```
+
+#### Stopping a Job at a Given Step
+
+配置job在一个特定step停止会让 `Job` 停止并且 `BatchStatus` 为 `STOPPED` 。停止一个 `Job` 可以让处理过程有个短暂的间隙，这样操作符可以在重启 `Job` 之前执行一些操作。
+
+当使用Java配置时，`stopAndRestart` 方法需要有一个 ’restart‘ 参数来指定 job 重启时从哪个step开始执行。
+
+在下面的场景中，如果 `step1` 以 `COMPLETED` 结束，那么job停止。一旦它重新启动，会从 `step2` 开始执行。
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+			.start(step1()).on("COMPLETED").stopAndRestart(step2())
+			.end()
+			.build();
+}
+```
+
+### 1.3.4 Programmatic Flow Decisions
+
+在一些情况下，可能需要除了 `ExitStatus` 之外的更多信息来决定下一步执行哪个step。在这种情况下，需要使用 `JobExecutionDecider` ，和下面的例子一样：
+
+```java
+public class MyDecider implements JobExecutionDecider {
+    public FlowExecutionStatus decide(JobExecution jobExecution, StepExecution stepExecution) {
+        String status;
+        if (someCondition()) {
+            status = "FAILED";
+        }
+        else {
+            status = "COMPLETED";
+        }
+        return new FlowExecutionStatus(status);
+    }
+}
+```
+
+在下面的例子中，`JobExecutionDecider` 的bean实现被直接传递到directly方法中。
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+			.start(step1())
+			.next(decider()).on("FAILED").to(step2())
+			.from(decider()).on("COMPLETED").to(step3())
+			.end()
+			.build();
+}
+```
+
+### 1.3.5 Split Flows
+
+目前为止描述的每个场景都 `Job` 以线性的方式每次执行一个step。除了这种典型的形式之外，Spring Batch也允许job被配置为并行的流程。
+
+基于Java的配置方式允许我们通过提供的builders来配置splits，就像下面的例子显示的一样，split元素包含了一个或多个flow元素，在每个flow元素中可以定义整个分离的流程。split也可以包含任意上面已讨论过的transition元素，就像next，end，fail等元素一样。
+
+```java
+@Bean
+public Job job() {
+	Flow flow1 = new FlowBuilder<SimpleFlow>("flow1")
+			.start(step1())
+			.next(step2())
+			.build();
+	Flow flow2 = new FlowBuilder<SimpleFlow>("flow2")
+			.start(step3())
+			.build();
+
+	return this.jobBuilderFactory.get("job")
+				.start(flow1)
+				.split(new SimpleAsyncTaskExecutor())
+				.add(flow2)
+				.next(step4())
+				.end()
+				.build();
+}
+```
+
+### 1.3.6 Externalizing Flow Definitions and Dependencies Between Jobs
+
+有一部分flow可以在job的外面定义为一个独立的bean定义，可以被复用。有两种方式可以实现。第一个是简单地声明flow作为其他地方定义的引用，就像下面的例子一样：
+
+```java
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+				.start(flow1())
+				.next(step3())
+				.end()
+				.build();
+}
+
+@Bean
+public Flow flow1() {
+	return new FlowBuilder<SimpleFlow>("flow1")
+			.start(step1())
+			.next(step2())
+			.build();
+}
+```
+
+像上面的例子一样在外面定义flow的影响就是从外面的flow讲steps插入到job中，就像他们已经在job内部定义了一样。通过这种方式，一些jobs可以一用同样的模板flow然后组合这些模板成不同的逻辑flows。这也是一个很好的方式来分离每个flow的集成测试。
+
+另一种外部flow的声明方式是使用 `JobStep` ，`JobStep` 和 `FlowStep` 相似，但是实际上会为flow中得到steps创建并且运行一个独立的job执行，像下面的例子一样：
+
+```java
+@Bean
+public Job jobStepJob() {
+	return this.jobBuilderFactory.get("jobStepJob")
+				.start(jobStepJobStep1(null))
+				.build();
+}
+
+@Bean
+public Step jobStepJobStep1(JobLauncher jobLauncher) {
+	return this.stepBuilderFactory.get("jobStepJobStep1")
+				.job(job())
+				.launcher(jobLauncher)
+				.parametersExtractor(jobParametersExtractor())
+				.build();
+}
+
+@Bean
+public Job job() {
+	return this.jobBuilderFactory.get("job")
+				.start(step1())
+				.build();
+}
+
+@Bean
+public DefaultJobParametersExtractor jobParametersExtractor() {
+	DefaultJobParametersExtractor extractor = new DefaultJobParametersExtractor();
+
+	extractor.setKeys(new String[]{"input.file"});
+
+	return extractor;
+}
+```
+
+job parameters extractor是一个决定 `Step` 的 `ExecutionContext` 如何转变成要执行 `Job` 的 `JobParameters` 的策略。 当你想要关于监控和报告jobs和steps的一些更细粒度的选择时，`JobStep` 会很有用。使用 `JobStep` 也是 ‘我如何创建jobs之间的依赖’ 这个问题的一个很好的答案。将一个大系统拆分为更小一些的模块来控制jobs的flow是一个很好的方式。
+
+## 1.4 Late Binding of `Job` and `Step` Attributes
 
 
 
 
+
+ 
 
 
 
