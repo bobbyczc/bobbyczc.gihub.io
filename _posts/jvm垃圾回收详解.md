@@ -285,7 +285,7 @@ ParNew垃圾收集器是Serial收集器的**多线程**版本。
 
 ##### 5.4.3 参数配置
 
-使用 `-XX:+UseParallelGC` 和 `-XX:-UseParallelOldGC` 能启动 Parallel Scavenge收集器
+使用 `-XX:+UseParallelGC` 和 `-XX:+UseParallelOldGC` 能启动 Parallel Scavenge收集器
 
 #### 5.5 Parallel Old
 
