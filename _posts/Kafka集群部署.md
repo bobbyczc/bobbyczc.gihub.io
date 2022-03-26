@@ -8,6 +8,7 @@ cover: 'http://on2171g4d.bkt.clouddn.com/jekyll-theme-h2o-postcover.jpg'
 tags: mq kafka
 ---
 
+
 # Kafka集群部署
 
 ## 1. 系统环境准备（所有节点）
@@ -107,18 +108,23 @@ tags: mq kafka
     server.3=node3:2888:3888
     ```
     
-    <aside>
-    💡 参数说明
+    
     **tickTime**：指 zookeeper 服务器之间或客户端与服务器之间维持心跳的时间间隔。
+    
     **initLimit**：用来指定zookeeper 集群中leader接受follower初始化连接时最长能忍受的心跳时间间隔数。若超过 指定个心跳的时间间隔leader还没有收到follower的响应，表明follower连接失败。
+    
     **syncLimit**：指定 leader与follower之间请求和应答时间最长不能超过多少个 tickTime 
+    
     **dataDir**：快照日志的存储路径。
+    
     **dataLogDir**：事物日志的存储路径，如果不配置该路径，当zk吞吐量较大的时，会严重影响zk的性能。
+    
     **clientPort**：客户端连接 zookeeper 服务器的端口，默认为2181。
+    
     **server.1** 这个1是服务器的标识也可以是其他的数字，**这个标识要写到dataDir目录下面myid文件里。**
+    
     server.1=hostname:2888:3888，hostname后面的第一个端口2888主要用于leader和follower之间的通信，第二个端口3888主要用于选主
     
-    </aside>
     
 5. 创建myid文件(三个节点不一致)
    
