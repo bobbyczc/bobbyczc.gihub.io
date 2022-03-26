@@ -1,7 +1,7 @@
 # Site settings 配置站点
 title: '阿超的个人博客'
 description: '技术菜鸟,随缘分享'
-keyword: 'Java,Spring,后端,超哥'
+keyword: 'Java,Spring,后端,阿超'
 url: 'https://bobbyczc.github.io/' # your host
 
 # when build blog on server, if you don't need baseurl, you should leave this value blank.

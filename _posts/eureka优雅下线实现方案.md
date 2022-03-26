@@ -1,3 +1,15 @@
+---
+layout: post
+title: 'Eureka结合容器云服务优雅下线方案
+'
+subtitle: 'eureka'
+date: 2021-09-30
+categories: eureka
+cover: 'http://on2171g4d.bkt.clouddn.com/jekyll-theme-h2o-postcover.jpg'
+tags: eureka springcloud
+---
+
+
 # Eureka结合容器云服务优雅下线方案
 
 ## 1. 需求背景
