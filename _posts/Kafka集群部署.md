@@ -125,7 +125,6 @@ tags: mq kafka
     
     server.1=hostname:2888:3888，hostname后面的第一个端口2888主要用于leader和follower之间的通信，第二个端口3888主要用于选主
     
-    
 5. 创建myid文件(三个节点不一致)
    
     myid文件位置必须放在zoo.cfg配置的dataDir路径下，且文件对应的内容与配置文件中**server.X**中**X**的值保持一致，即node1中myid内的值为1，node2中myid内容为2
@@ -305,3 +304,5 @@ tags: mq kafka
     [root@node2 bin]# ./kafka-topics.sh --list --zookeeper node1:2181
     streaming
     ```
+
+   

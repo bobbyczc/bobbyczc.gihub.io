@@ -513,7 +513,7 @@ Parallel Scavenge收集器的老年代版本；jdk1.6开始出现
 
   G1
 
-  ​
+  
 
 ### 6. 其他JVM常用配置参数 
 
